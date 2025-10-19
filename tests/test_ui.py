@@ -215,3 +215,30 @@ class TestRepoSelector:
         assert "8" in captured.out
         assert "Failed" in captured.out
         assert "2" in captured.out
+
+    def test_show_summary_with_skipped(self, capsys):
+        """Test showing installation summary with skipped count."""
+        selector = RepoSelector()
+
+        selector.show_summary(
+            total=10,
+            successful=6,
+            failed=1,
+            extracted=12,
+            skipped=3,
+            extraction_mode="extract"
+        )
+
+        captured = capsys.readouterr()
+
+        assert "Installation Summary" in captured.out
+        assert "Total selected" in captured.out
+        assert "10" in captured.out
+        assert "Successfully added" in captured.out
+        assert "6" in captured.out
+        assert "Skills extracted" in captured.out
+        assert "12" in captured.out
+        assert "Skipped" in captured.out
+        assert "3" in captured.out
+        assert "Failed" in captured.out
+        assert "1" in captured.out
