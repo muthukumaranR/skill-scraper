@@ -321,7 +321,7 @@ class SkillExtractor:
         Install selected skills from staging to final location.
 
         Args:
-            skills_to_install: List of skill dictionaries with staging_path and final_path
+            skills_to_install: List of skill dictionaries with staging_path and install_location
 
         Returns:
             Installation result with success count
@@ -329,13 +329,30 @@ class SkillExtractor:
         result = {
             "success": 0,
             "failed": 0,
-            "errors": []
+            "errors": [],
+            "installed_local": 0,
+            "installed_global": 0
         }
 
         for skill in skills_to_install:
             try:
                 staging_path = Path(skill["staging_path"])
-                final_path = Path(skill["final_path"])
+
+                install_location = skill.get("install_location", self.config.install_location)
+
+                default_global = Path("~/.claude/skills").expanduser()
+                default_local = Path("./.claude/skills").expanduser()
+
+                if self.skills_dir != default_global and self.skills_dir != default_local:
+                    skills_base_dir = self.skills_dir
+                elif install_location == "local":
+                    skills_base_dir = default_local
+                else:
+                    skills_base_dir = default_global
+
+                skills_base_dir.mkdir(parents=True, exist_ok=True)
+
+                final_path = skills_base_dir / skill["name"]
 
                 if not staging_path.exists():
                     logger.error(f"Staging path does not exist: {staging_path}")
@@ -343,15 +360,18 @@ class SkillExtractor:
                     result["errors"].append(f"{skill['name']}: Staging path not found")
                     continue
 
-                final_path.parent.mkdir(parents=True, exist_ok=True)
-
                 if final_path.exists():
                     shutil.rmtree(final_path)
                     logger.debug(f"Removed existing skill at {final_path}")
 
                 shutil.copytree(staging_path, final_path)
-                logger.info(f"Installed skill: {skill['name']} to {final_path}")
+                logger.info(f"Installed skill: {skill['name']} to {final_path} ({install_location})")
                 result["success"] += 1
+
+                if install_location == "local":
+                    result["installed_local"] += 1
+                else:
+                    result["installed_global"] += 1
 
             except Exception as e:
                 logger.error(f"Failed to install skill {skill['name']}: {e}", exc_info=True)
