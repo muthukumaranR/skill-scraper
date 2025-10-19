@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List
 import subprocess
+import re
 
 from loguru import logger
 from config import ExtractionConfig
@@ -13,11 +14,23 @@ from config import ExtractionConfig
 class SkillExtractor:
     """Extracts actual skills from skill repositories."""
 
-    def __init__(self, skills_dir: str = "~/.claude/skills", config: ExtractionConfig = None):
+    def __init__(self, skills_dir: str = None, config: ExtractionConfig = None):
+        self.config = config or ExtractionConfig()
+
+        if skills_dir is None:
+            if self.config.install_location == "local":
+                skills_dir = "./.claude/skills"
+            else:
+                skills_dir = "~/.claude/skills"
+
         self.skills_dir = Path(skills_dir).expanduser()
         self.skills_dir.mkdir(parents=True, exist_ok=True)
-        self.config = config or ExtractionConfig()
+
+        self.staging_dir = Path(tempfile.mkdtemp(prefix="skill-scraper-staging-"))
+
         logger.info(f"SkillExtractor initialized with mode: {self.config.mode}")
+        logger.info(f"Installation location: {self.config.install_location} ({self.skills_dir})")
+        logger.info(f"Staging directory: {self.staging_dir}")
 
     def extract_skills(self, repo: Dict[str, str], detection_result: Dict) -> Dict[str, any]:
         """
