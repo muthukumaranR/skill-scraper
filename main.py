@@ -130,6 +130,10 @@ def main():
             ui.print_status(f"✓ Loaded [green]{len(repos)}[/green] repositories from storage\n", style="bold")
 
         config = ui.select_extraction_mode()
+
+        if config.mode in ["extract", "both", "metadata"]:
+            config.update_existing = ui.confirm_skill_update()
+
         extractor = SkillExtractor(config=config)
 
         detection_results = {}
