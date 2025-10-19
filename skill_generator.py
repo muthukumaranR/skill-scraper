@@ -15,12 +15,13 @@ class SkillGenerator:
         self.skills_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Skills directory: {self.skills_dir}")
 
-    def generate_skill(self, repo: Dict[str, str]) -> bool:
+    def generate_skill(self, repo: Dict[str, str], update: bool = False) -> bool:
         """
         Generate a SKILL.md file for a repository.
 
         Args:
             repo: Repository dictionary with owner, name, description, url
+            update: If True, update existing skill instead of skipping
 
         Returns:
             True if successful, False otherwise
@@ -28,7 +29,7 @@ class SkillGenerator:
         skill_name = f"{repo['owner']}-{repo['name']}"
         skill_folder = self.skills_dir / skill_name
 
-        if skill_folder.exists():
+        if skill_folder.exists() and not update:
             logger.warning(f"Skill {skill_name} already exists, skipping")
             return False
 
@@ -41,12 +42,13 @@ class SkillGenerator:
             with open(skill_file, 'w') as f:
                 f.write(skill_content)
 
-            logger.info(f"Created skill: {skill_name} at {skill_file}")
+            action = "Updated" if skill_folder.exists() else "Created"
+            logger.info(f"{action} skill: {skill_name} at {skill_file}")
             return True
 
         except Exception as e:
             logger.error(f"Failed to create skill {skill_name}: {e}")
-            if skill_folder.exists():
+            if skill_folder.exists() and not update:
                 shutil.rmtree(skill_folder)
             return False
 
