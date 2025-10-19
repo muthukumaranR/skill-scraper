@@ -213,6 +213,54 @@ def main():
 
         console.print()  # Space after progress bar
 
+        if config.mode in ["extract", "both"] and total_extracted > 0:
+            staged_skills = extractor.get_staged_skills()
+
+            if staged_skills:
+                ui.print_status(
+                    f"\n✓ Extracted [green]{len(staged_skills)}[/green] skills to staging area\n",
+                    style="bold"
+                )
+
+                skills_to_install = []
+
+                if config.selection_mode == "manual":
+                    skills_to_install = ui.review_extracted_skills(staged_skills)
+                else:
+                    skills_to_install = staged_skills
+                    ui.print_status(
+                        f"⚡ Auto mode: Installing all {len(staged_skills)} extracted skills\n",
+                        style="yellow"
+                    )
+
+                if skills_to_install:
+                    ui.print_status(
+                        f"\n📦 Installing {len(skills_to_install)} selected skills...\n",
+                        style="bold cyan"
+                    )
+
+                    install_result = extractor.install_skills(skills_to_install)
+
+                    successful += install_result['success']
+                    failed += install_result['failed']
+
+                    if install_result['success'] > 0:
+                        install_location = "global (~/.claude/skills)" if config.install_location == "global" else "local (./.claude/skills)"
+                        ui.print_status(
+                            f"✓ Installed [green]{install_result['success']}[/green] skills to {install_location}\n",
+                            style="green bold"
+                        )
+
+                    if install_result['failed'] > 0:
+                        ui.print_status(
+                            f"✗ Failed to install [red]{install_result['failed']}[/red] skills\n",
+                            style="red"
+                        )
+                        for error in install_result['errors']:
+                            logger.error(f"Installation error: {error}")
+                else:
+                    ui.print_status("\n✗ No skills selected for installation", style="yellow")
+
         ui.show_summary(
             len(selected),
             successful,
