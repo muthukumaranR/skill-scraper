@@ -1,4 +1,4 @@
-"""GitHub repository scraper for awesome-* lists."""
+"""GitHub repository scraper for any repository."""
 
 import re
 from typing import List, Dict
@@ -10,7 +10,7 @@ from loguru import logger
 
 
 class RepoScraper:
-    """Scrapes GitHub repositories from awesome-* lists."""
+    """Scrapes GitHub repositories from READMEs or direct skill repositories."""
 
     def __init__(self):
         self.client = httpx.Client(
@@ -24,15 +24,15 @@ class RepoScraper:
 
     def scrape_awesome_repo(self, github_url: str) -> List[Dict[str, str]]:
         """
-        Scrape an awesome-* GitHub repository for linked repositories.
+        Scrape a GitHub repository for linked repositories or return itself if it's a skill repo.
 
         Args:
-            github_url: URL to the awesome-* GitHub repository
+            github_url: URL to the GitHub repository
 
         Returns:
             List of dictionaries containing repo information
         """
-        logger.info(f"Scraping awesome list: {github_url}")
+        logger.info(f"Scraping repository: {github_url}")
 
         parsed = urlparse(github_url)
         path_parts = parsed.path.strip('/').split('/')
@@ -42,6 +42,19 @@ class RepoScraper:
             return []
 
         owner, repo = path_parts[0], path_parts[1]
+
+        if self._is_direct_skill_repo(owner, repo):
+            logger.info(f"{owner}/{repo} appears to be a skill repository itself")
+            repo_dict = {
+                "owner": owner,
+                "name": repo,
+                "full_name": f"{owner}/{repo}",
+                "url": github_url.rstrip('/'),
+                "description": "Skill repository"
+            }
+            self.fetch_repo_details(repo_dict)
+            return [repo_dict]
+
         raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/main/README.md"
 
         try:
@@ -54,11 +67,61 @@ class RepoScraper:
             content = response.text
 
             logger.info(f"Successfully fetched README from {raw_url}")
-            return self._extract_repos(content)
+            repos = self._extract_repos(content)
+
+            if not repos:
+                logger.info(f"No linked repositories found, treating {owner}/{repo} as standalone repository")
+                repo_dict = {
+                    "owner": owner,
+                    "name": repo,
+                    "full_name": f"{owner}/{repo}",
+                    "url": github_url.rstrip('/'),
+                    "description": self._extract_first_paragraph(content) or "No description available"
+                }
+                return [repo_dict]
+
+            return repos
 
         except httpx.HTTPError as e:
             logger.error(f"Failed to fetch {raw_url}: {e}")
-            return []
+            logger.info(f"Treating {owner}/{repo} as standalone repository")
+            repo_dict = {
+                "owner": owner,
+                "name": repo,
+                "full_name": f"{owner}/{repo}",
+                "url": github_url.rstrip('/'),
+                "description": "No description available"
+            }
+            return [repo_dict]
+
+    def _is_direct_skill_repo(self, owner: str, repo_name: str) -> bool:
+        """
+        Check if a repository contains SKILL.md files directly.
+
+        Args:
+            owner: Repository owner
+            repo_name: Repository name
+
+        Returns:
+            True if repository contains SKILL.md files
+        """
+        skill_paths = [
+            f"https://raw.githubusercontent.com/{owner}/{repo_name}/main/SKILL.md",
+            f"https://raw.githubusercontent.com/{owner}/{repo_name}/master/SKILL.md",
+            f"https://raw.githubusercontent.com/{owner}/{repo_name}/main/skills/SKILL.md",
+            f"https://raw.githubusercontent.com/{owner}/{repo_name}/master/skills/SKILL.md",
+        ]
+
+        for skill_url in skill_paths:
+            try:
+                response = self.client.head(skill_url, timeout=10.0)
+                if response.status_code == 200:
+                    logger.info(f"Found SKILL.md at {skill_url}")
+                    return True
+            except Exception:
+                continue
+
+        return False
 
     def _extract_repos(self, markdown_content: str) -> List[Dict[str, str]]:
         """Extract GitHub repositories from markdown content."""
