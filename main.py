@@ -31,7 +31,7 @@ def setup_logging():
 
 def show_banner():
     """Display application banner."""
-    banner = """[bold cyan]
+    banner = r"""[bold cyan]
  ____  _    _ _ _    ____
 / ___|| | _(_) | |  / ___|  ___ _ __ __ _ _ __   ___ _ __
 \___ \| |/ / | | |  \___ \ / __| '__/ _` | '_ \ / _ \ '__|
