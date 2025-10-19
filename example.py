@@ -78,6 +78,7 @@ if __name__ == "__main__":
     logger.add(lambda msg: print(msg, end=""), format="{message}", colorize=True, level="INFO")
 
     print("\n=== Example 1: Scrape and Install ===\n")
+    example_scrape_and_install()
 
     print("\n=== Example 2: List Skills ===\n")
     example_list_skills()

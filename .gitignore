@@ -11,5 +11,6 @@ wheels/
 
 # Generated files
 repos.json
+example_repos.json
 skill_scraper.log
 .pytest_cache/
