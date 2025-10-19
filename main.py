@@ -168,18 +168,19 @@ def main():
         successful = 0
         failed = 0
         total_extracted = 0
+        skipped_count = 0
 
         with ui.show_progress("Extracting skills", len(selected)) as progress:
             task = progress.add_task("[green]Extracting skills...", total=len(selected))
 
             for repo in selected:
-                progress.update(task, description=f"[green]Processing: {repo['full_name']}")
                 repo_full_name = repo['full_name']
                 is_skill_repo = detection_results.get(repo_full_name, {}).get('is_skill_repo', False)
 
                 should_extract = False
                 if config.mode == "extract" or (config.mode == "both" and is_skill_repo):
                     if config.confirm_extraction and is_skill_repo:
+                        progress.update(task, description=f"[yellow]⏸ Awaiting confirmation: {repo_full_name}")
                         should_extract = ui.confirm_skill_extraction(
                             repo,
                             detection_results[repo_full_name]
@@ -188,6 +189,7 @@ def main():
                         should_extract = is_skill_repo
 
                 if should_extract:
+                    progress.update(task, description=f"[green]✓ Extracting: {repo_full_name}")
                     logger.info(f"Extracting skills from {repo_full_name}...")
                     extraction_result = extractor.extract_skills(
                         repo,
@@ -200,8 +202,19 @@ def main():
                             f"Extracted {extraction_result['extracted_count']} skills "
                             f"from {repo_full_name}"
                         )
+                        progress.update(task, description=f"[green]✓ Extracted {extraction_result['extracted_count']} from {repo_full_name}")
                     else:
                         logger.warning(f"Failed to extract skills from {repo_full_name}")
+                        progress.update(task, description=f"[red]✗ Failed: {repo_full_name}")
+                elif is_skill_repo and config.confirm_extraction:
+                    progress.update(task, description=f"[dim]⏭ Skipped (user declined): {repo_full_name}")
+                    logger.info(f"User declined extraction from {repo_full_name}")
+                    skipped_count += 1
+                elif not is_skill_repo and config.mode in ["extract", "both"]:
+                    progress.update(task, description=f"[dim]⏭ Skipped (not a skill repo): {repo_full_name}")
+                    skipped_count += 1
+                else:
+                    progress.update(task, description=f"[cyan]Processing: {repo_full_name}")
 
                 if config.mode in ["metadata", "both"]:
                     if skill_gen.generate_skill(repo, update=config.update_existing):
@@ -266,6 +279,7 @@ def main():
             successful,
             failed,
             extracted=total_extracted,
+            skipped=skipped_count,
             extraction_mode=config.mode
         )
 
