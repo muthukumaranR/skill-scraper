@@ -157,7 +157,7 @@ class SkillExtractor:
         source_repo: Dict[str, str],
         detection_result: Dict
     ) -> Dict[str, any]:
-        """Extract a single skill from a file."""
+        """Extract a single skill from a file to staging directory."""
         result = {
             "success": False,
             "skipped": False,
@@ -170,31 +170,42 @@ class SkillExtractor:
 
             skill_name = self._determine_skill_name(skill_folder, relative_path, source_repo)
 
-            target_folder = self.skills_dir / skill_name
+            final_target_folder = self.skills_dir / skill_name
 
-            if target_folder.exists() and self.config.skip_existing:
-                logger.info(f"Skill already exists, skipping: {skill_name}")
-                result["skipped"] = True
-                return result
+            if final_target_folder.exists():
+                if self.config.skip_existing and not self.config.update_existing:
+                    logger.info(f"Skill already exists, skipping: {skill_name}")
+                    result["skipped"] = True
+                    return result
+                elif self.config.update_existing:
+                    logger.info(f"Skill already exists, will update: {skill_name}")
 
-            target_folder.mkdir(parents=True, exist_ok=True)
+            staging_folder = self.staging_dir / skill_name
+            staging_folder.mkdir(parents=True, exist_ok=True)
 
-            self._copy_skill_files(skill_folder, target_folder)
+            self._copy_skill_files(skill_folder, staging_folder)
 
+            skill_md_path = staging_folder / "SKILL.md"
             self._enrich_skill_metadata(
-                target_folder / "SKILL.md",
+                skill_md_path,
                 source_repo,
                 skill_name,
                 detection_result
             )
 
-            logger.info(f"Extracted skill: {skill_name}")
+            metadata = self._parse_skill_metadata(skill_md_path)
+
+            logger.info(f"Extracted skill to staging: {skill_name}")
 
             result["success"] = True
             result["skill"] = {
                 "name": skill_name,
-                "path": str(target_folder),
-                "source_repo": source_repo["full_name"]
+                "staging_path": str(staging_folder),
+                "final_path": str(final_target_folder),
+                "source_repo": source_repo["full_name"],
+                "description": metadata.get("description", "No description available"),
+                "skill_name": metadata.get("name", skill_name),
+                "metadata": metadata
             }
 
         except Exception as e:
