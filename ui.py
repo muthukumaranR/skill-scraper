@@ -160,8 +160,182 @@ class RepoSelector:
                 "Ask for confirmation before extracting skills from each repository?"
             )
 
+            install_location = self.select_installation_location()
+            config.install_location = install_location
+
+            selection_mode = self.select_selection_mode()
+            config.selection_mode = selection_mode
+
         logger.info(f"Extraction mode selected: {mode}")
         return config
+
+    def select_installation_location(self) -> str:
+        """
+        Select installation location for skills.
+
+        Returns:
+            Installation location ('local' or 'global')
+        """
+        self.console.print()  # Add spacing before prompt
+        location = questionary.select(
+            "Where should extracted skills be installed?",
+            choices=[
+                Choice(
+                    "🌍 Global (~/.claude/skills) - Available to all Claude Code instances",
+                    value="global"
+                ),
+                Choice(
+                    "📁 Local (./.claude/skills) - Project-specific skills only",
+                    value="local"
+                ),
+            ]
+        ).ask()
+
+        if location is None:
+            location = "global"
+
+        logger.info(f"Installation location selected: {location}")
+        return location
+
+    def confirm_repo_merge(self, existing_count: int) -> bool:
+        """
+        Ask if user wants to merge with existing repos or replace them.
+
+        Args:
+            existing_count: Number of existing repos
+
+        Returns:
+            True if user wants to merge
+        """
+        self.console.print()  # Add spacing before prompt
+        message = (
+            f"Found {existing_count} existing repositories in storage. "
+            "Merge with new repos or replace completely?"
+        )
+
+        result = questionary.select(
+            message,
+            choices=[
+                Choice("🔀 Merge - Combine with existing repos (recommended)", value=True),
+                Choice("♻️  Replace - Discard existing repos", value=False),
+            ]
+        ).ask()
+
+        return result if result is not None else True
+
+    def confirm_skill_update(self) -> bool:
+        """
+        Ask if user wants to update existing skills.
+
+        Returns:
+            True if user wants to update existing skills
+        """
+        self.console.print()  # Add spacing before prompt
+        result = questionary.select(
+            "How should existing skills be handled?",
+            choices=[
+                Choice("⏭️  Skip - Keep existing skills unchanged (recommended)", value=False),
+                Choice("🔄 Update - Overwrite existing skills with new versions", value=True),
+            ]
+        ).ask()
+
+        return result if result is not None else False
+
+    def select_selection_mode(self) -> str:
+        """
+        Select skill selection mode after extraction.
+
+        Returns:
+            Selection mode ('auto' or 'manual')
+        """
+        self.console.print()  # Add spacing before prompt
+        mode = questionary.select(
+            "How should extracted skills be selected for installation?",
+            choices=[
+                Choice(
+                    "✋ Manual - Review and select which skills to install (recommended)",
+                    value="manual"
+                ),
+                Choice(
+                    "⚡ Auto - Automatically install all extracted skills",
+                    value="auto"
+                ),
+            ]
+        ).ask()
+
+        if mode is None:
+            mode = "manual"
+
+        logger.info(f"Selection mode selected: {mode}")
+        return mode
+
+    def review_extracted_skills(self, staged_skills: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """
+        Display and select from extracted skills in staging.
+
+        Args:
+            staged_skills: List of skill dictionaries from staging
+
+        Returns:
+            List of selected skills to install
+        """
+        if not staged_skills:
+            logger.warning("No staged skills to review")
+            return []
+
+        self._show_staged_skills_summary(staged_skills)
+
+        self.console.print("[dim]Use arrow keys to navigate, space to select/deselect, 'a' to toggle all, enter to confirm[/dim]\n")
+
+        choices = []
+        for skill in staged_skills:
+            description = skill.get('description', 'No description available')
+            if len(description) > 100:
+                description = description[:97] + "..."
+
+            choice_name = f"{skill['skill_name']}\n   {description}"
+            choices.append(Choice(title=choice_name, value=skill))
+
+        selected = questionary.checkbox(
+            f"Select skills to install ({len(staged_skills)} available):",
+            choices=choices,
+        ).ask()
+
+        if selected is None:
+            logger.info("Skill selection cancelled")
+            return []
+
+        logger.info(f"Selected {len(selected)} skills for installation")
+        return selected
+
+    def _show_staged_skills_summary(self, staged_skills: List[Dict[str, str]]):
+        """Display summary of staged skills with Rich formatting."""
+        table = Table(
+            title=f"🎯 Extracted {len(staged_skills)} Skills - Ready for Review",
+            box=box.DOUBLE,
+            show_header=True
+        )
+
+        table.add_column("Skill Name", style="cyan", no_wrap=False, width=30)
+        table.add_column("Description", style="white", no_wrap=False)
+
+        for skill in staged_skills[:10]:
+            skill_name = skill.get('skill_name', skill['name'])
+            description = skill.get('description', 'No description available')
+            if len(description) > 80:
+                description = description[:77] + "..."
+
+            table.add_row(skill_name, description)
+
+        if len(staged_skills) > 10:
+            table.add_row(
+                f"[dim]... and {len(staged_skills) - 10} more[/dim]",
+                "[dim]Review all in selection below[/dim]"
+            )
+
+        self.console.print("\n")
+        self.console.print(table)
+        self.console.print("\n")
 
     def confirm_skill_extraction(
         self,
