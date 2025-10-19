@@ -169,8 +169,8 @@ def main():
         failed = 0
         total_extracted = 0
 
-        with ui.show_progress("Installing skills", len(selected)) as progress:
-            task = progress.add_task("[green]Installing skills...", total=len(selected))
+        with ui.show_progress("Extracting skills", len(selected)) as progress:
+            task = progress.add_task("[green]Extracting skills...", total=len(selected))
 
             for repo in selected:
                 progress.update(task, description=f"[green]Processing: {repo['full_name']}")
