@@ -445,6 +445,7 @@ class RepoSelector:
         successful: int,
         failed: int,
         extracted: int = 0,
+        skipped: int = 0,
         extraction_mode: str = None
     ) -> None:
         """
@@ -455,6 +456,7 @@ class RepoSelector:
             successful: Number of successful installations
             failed: Number of failed installations
             extracted: Number of skills extracted from repositories
+            skipped: Number of repositories skipped during extraction
             extraction_mode: The extraction mode used
         """
         mode_labels = {
@@ -472,6 +474,8 @@ class RepoSelector:
 
         if extraction_mode and extraction_mode in ["extract", "both"]:
             table.add_row("Skills extracted", f"[yellow]{extracted}[/yellow]")
+            if skipped > 0:
+                table.add_row("Skipped", f"[dim]{skipped}[/dim]")
 
         if failed > 0:
             table.add_row("Failed", f"[red]{failed}[/red]")
