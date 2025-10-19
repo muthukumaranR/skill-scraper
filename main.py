@@ -282,6 +282,8 @@ def main():
     finally:
         scraper.close()
         detector.close()
+        if extractor:
+            extractor.cleanup_staging()
 
 
 if __name__ == "__main__":
