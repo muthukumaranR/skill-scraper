@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List
 import subprocess
+import re
 
 from loguru import logger
 from config import ExtractionConfig
@@ -13,11 +14,23 @@ from config import ExtractionConfig
 class SkillExtractor:
     """Extracts actual skills from skill repositories."""
 
-    def __init__(self, skills_dir: str = "~/.claude/skills", config: ExtractionConfig = None):
+    def __init__(self, skills_dir: str = None, config: ExtractionConfig = None):
+        self.config = config or ExtractionConfig()
+
+        if skills_dir is None:
+            if self.config.install_location == "local":
+                skills_dir = "./.claude/skills"
+            else:
+                skills_dir = "~/.claude/skills"
+
         self.skills_dir = Path(skills_dir).expanduser()
         self.skills_dir.mkdir(parents=True, exist_ok=True)
-        self.config = config or ExtractionConfig()
+
+        self.staging_dir = Path(tempfile.mkdtemp(prefix="skill-scraper-staging-"))
+
         logger.info(f"SkillExtractor initialized with mode: {self.config.mode}")
+        logger.info(f"Installation location: {self.config.install_location} ({self.skills_dir})")
+        logger.info(f"Staging directory: {self.staging_dir}")
 
     def extract_skills(self, repo: Dict[str, str], detection_result: Dict) -> Dict[str, any]:
         """
@@ -144,7 +157,7 @@ class SkillExtractor:
         source_repo: Dict[str, str],
         detection_result: Dict
     ) -> Dict[str, any]:
-        """Extract a single skill from a file."""
+        """Extract a single skill from a file to staging directory."""
         result = {
             "success": False,
             "skipped": False,
@@ -157,31 +170,42 @@ class SkillExtractor:
 
             skill_name = self._determine_skill_name(skill_folder, relative_path, source_repo)
 
-            target_folder = self.skills_dir / skill_name
+            final_target_folder = self.skills_dir / skill_name
 
-            if target_folder.exists() and self.config.skip_existing:
-                logger.info(f"Skill already exists, skipping: {skill_name}")
-                result["skipped"] = True
-                return result
+            if final_target_folder.exists():
+                if self.config.skip_existing and not self.config.update_existing:
+                    logger.info(f"Skill already exists, skipping: {skill_name}")
+                    result["skipped"] = True
+                    return result
+                elif self.config.update_existing:
+                    logger.info(f"Skill already exists, will update: {skill_name}")
 
-            target_folder.mkdir(parents=True, exist_ok=True)
+            staging_folder = self.staging_dir / skill_name
+            staging_folder.mkdir(parents=True, exist_ok=True)
 
-            self._copy_skill_files(skill_folder, target_folder)
+            self._copy_skill_files(skill_folder, staging_folder)
 
+            skill_md_path = staging_folder / "SKILL.md"
             self._enrich_skill_metadata(
-                target_folder / "SKILL.md",
+                skill_md_path,
                 source_repo,
                 skill_name,
                 detection_result
             )
 
-            logger.info(f"Extracted skill: {skill_name}")
+            metadata = self._parse_skill_metadata(skill_md_path)
+
+            logger.info(f"Extracted skill to staging: {skill_name}")
 
             result["success"] = True
             result["skill"] = {
                 "name": skill_name,
-                "path": str(target_folder),
-                "source_repo": source_repo["full_name"]
+                "staging_path": str(staging_folder),
+                "final_path": str(final_target_folder),
+                "source_repo": source_repo["full_name"],
+                "description": metadata.get("description", "No description available"),
+                "skill_name": metadata.get("name", skill_name),
+                "metadata": metadata
             }
 
         except Exception as e:
@@ -251,3 +275,128 @@ class SkillExtractor:
 
         except Exception as e:
             logger.warning(f"Could not enrich metadata for {skill_name}: {e}")
+
+    def _parse_skill_metadata(self, skill_file: Path) -> Dict[str, str]:
+        """Parse metadata from SKILL.md file."""
+        metadata = {
+            "name": "",
+            "description": "No description available",
+            "content": ""
+        }
+
+        if not skill_file.exists():
+            return metadata
+
+        try:
+            content = skill_file.read_text()
+            metadata["content"] = content
+
+            frontmatter_match = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+            if frontmatter_match:
+                frontmatter = frontmatter_match.group(1)
+                for line in frontmatter.split('\n'):
+                    if ':' in line:
+                        key, value = line.split(':', 1)
+                        key = key.strip().lower()
+                        value = value.strip()
+                        if key in ['name', 'description']:
+                            metadata[key] = value
+
+            if not metadata["description"] or metadata["description"] == "No description available":
+                lines = content.split('\n')
+                for i, line in enumerate(lines):
+                    if line.startswith('# ') and i + 1 < len(lines):
+                        next_line = lines[i + 1].strip()
+                        if next_line and not next_line.startswith('#'):
+                            metadata["description"] = next_line[:200]
+                            break
+
+        except Exception as e:
+            logger.warning(f"Could not parse metadata from {skill_file}: {e}")
+
+        return metadata
+
+    def install_skills(self, skills_to_install: List[Dict[str, str]]) -> Dict[str, any]:
+        """
+        Install selected skills from staging to final location.
+
+        Args:
+            skills_to_install: List of skill dictionaries with staging_path and final_path
+
+        Returns:
+            Installation result with success count
+        """
+        result = {
+            "success": 0,
+            "failed": 0,
+            "errors": []
+        }
+
+        for skill in skills_to_install:
+            try:
+                staging_path = Path(skill["staging_path"])
+                final_path = Path(skill["final_path"])
+
+                if not staging_path.exists():
+                    logger.error(f"Staging path does not exist: {staging_path}")
+                    result["failed"] += 1
+                    result["errors"].append(f"{skill['name']}: Staging path not found")
+                    continue
+
+                final_path.parent.mkdir(parents=True, exist_ok=True)
+
+                if final_path.exists():
+                    shutil.rmtree(final_path)
+                    logger.debug(f"Removed existing skill at {final_path}")
+
+                shutil.copytree(staging_path, final_path)
+                logger.info(f"Installed skill: {skill['name']} to {final_path}")
+                result["success"] += 1
+
+            except Exception as e:
+                logger.error(f"Failed to install skill {skill['name']}: {e}", exc_info=True)
+                result["failed"] += 1
+                result["errors"].append(f"{skill['name']}: {str(e)}")
+
+        return result
+
+    def cleanup_staging(self):
+        """Clean up the staging directory."""
+        try:
+            if self.staging_dir.exists():
+                shutil.rmtree(self.staging_dir)
+                logger.info(f"Cleaned up staging directory: {self.staging_dir}")
+        except Exception as e:
+            logger.warning(f"Could not clean up staging directory: {e}")
+
+    def get_staged_skills(self) -> List[Dict[str, str]]:
+        """
+        Get list of all skills currently in staging.
+
+        Returns:
+            List of skill dictionaries with metadata
+        """
+        staged_skills = []
+
+        if not self.staging_dir.exists():
+            return staged_skills
+
+        for skill_folder in self.staging_dir.iterdir():
+            if not skill_folder.is_dir():
+                continue
+
+            skill_md = skill_folder / "SKILL.md"
+            if not skill_md.exists():
+                continue
+
+            metadata = self._parse_skill_metadata(skill_md)
+            staged_skills.append({
+                "name": skill_folder.name,
+                "staging_path": str(skill_folder),
+                "final_path": str(self.skills_dir / skill_folder.name),
+                "description": metadata.get("description", "No description available"),
+                "skill_name": metadata.get("name", skill_folder.name),
+                "metadata": metadata
+            })
+
+        return staged_skills

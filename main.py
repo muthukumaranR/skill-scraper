@@ -31,7 +31,7 @@ def setup_logging():
 
 def show_banner():
     """Display application banner."""
-    banner = """[bold cyan]
+    banner = r"""[bold cyan]
  ____  _    _ _ _    ____
 / ___|| | _(_) | |  / ___|  ___ _ __ __ _ _ __   ___ _ __
 \___ \| |/ / | | |  \___ \ / __| '__/ _` | '_ \ / _ \ '__|
@@ -104,9 +104,16 @@ def main():
 
                 console.print()  # Space after progress bar
 
-            storage.save_repos(repos)
-            ui.print_status("✓ Saved repositories to repos.json\n", style="green")
-            logger.info("Saved repositories to repos.json")
+            merge_repos = False
+            if storage.exists():
+                existing = storage.load_repos()
+                merge_repos = ui.confirm_repo_merge(len(existing))
+
+            storage.save_repos(repos, merge=merge_repos, source=github_url)
+
+            action = "Merged" if merge_repos else "Saved"
+            ui.print_status(f"✓ {action} repositories to repos.json\n", style="green")
+            logger.info(f"{action} repositories to repos.json")
 
         elif action == "load":
             if not storage.exists():
@@ -123,6 +130,10 @@ def main():
             ui.print_status(f"✓ Loaded [green]{len(repos)}[/green] repositories from storage\n", style="bold")
 
         config = ui.select_extraction_mode()
+
+        if config.mode in ["extract", "both", "metadata"]:
+            config.update_existing = ui.confirm_skill_update()
+
         extractor = SkillExtractor(config=config)
 
         detection_results = {}
@@ -158,8 +169,8 @@ def main():
         failed = 0
         total_extracted = 0
 
-        with ui.show_progress("Installing skills", len(selected)) as progress:
-            task = progress.add_task("[green]Installing skills...", total=len(selected))
+        with ui.show_progress("Extracting skills", len(selected)) as progress:
+            task = progress.add_task("[green]Extracting skills...", total=len(selected))
 
             for repo in selected:
                 progress.update(task, description=f"[green]Processing: {repo['full_name']}")
@@ -184,7 +195,6 @@ def main():
                     )
 
                     if extraction_result['success']:
-                        successful += extraction_result['extracted_count']
                         total_extracted += extraction_result['extracted_count']
                         logger.info(
                             f"Extracted {extraction_result['extracted_count']} skills "
@@ -194,7 +204,7 @@ def main():
                         logger.warning(f"Failed to extract skills from {repo_full_name}")
 
                 if config.mode in ["metadata", "both"]:
-                    if skill_gen.generate_skill(repo):
+                    if skill_gen.generate_skill(repo, update=config.update_existing):
                         successful += 1
                     else:
                         failed += 1
@@ -202,6 +212,54 @@ def main():
                 progress.advance(task)
 
         console.print()  # Space after progress bar
+
+        if config.mode in ["extract", "both"] and total_extracted > 0:
+            staged_skills = extractor.get_staged_skills()
+
+            if staged_skills:
+                ui.print_status(
+                    f"\n✓ Extracted [green]{len(staged_skills)}[/green] skills to staging area\n",
+                    style="bold"
+                )
+
+                skills_to_install = []
+
+                if config.selection_mode == "manual":
+                    skills_to_install = ui.review_extracted_skills(staged_skills)
+                else:
+                    skills_to_install = staged_skills
+                    ui.print_status(
+                        f"⚡ Auto mode: Installing all {len(staged_skills)} extracted skills\n",
+                        style="yellow"
+                    )
+
+                if skills_to_install:
+                    ui.print_status(
+                        f"\n📦 Installing {len(skills_to_install)} selected skills...\n",
+                        style="bold cyan"
+                    )
+
+                    install_result = extractor.install_skills(skills_to_install)
+
+                    successful += install_result['success']
+                    failed += install_result['failed']
+
+                    if install_result['success'] > 0:
+                        install_location = "global (~/.claude/skills)" if config.install_location == "global" else "local (./.claude/skills)"
+                        ui.print_status(
+                            f"✓ Installed [green]{install_result['success']}[/green] skills to {install_location}\n",
+                            style="green bold"
+                        )
+
+                    if install_result['failed'] > 0:
+                        ui.print_status(
+                            f"✗ Failed to install [red]{install_result['failed']}[/red] skills\n",
+                            style="red"
+                        )
+                        for error in install_result['errors']:
+                            logger.error(f"Installation error: {error}")
+                else:
+                    ui.print_status("\n✗ No skills selected for installation", style="yellow")
 
         ui.show_summary(
             len(selected),
@@ -224,6 +282,8 @@ def main():
     finally:
         scraper.close()
         detector.close()
+        if extractor:
+            extractor.cleanup_staging()
 
 
 if __name__ == "__main__":

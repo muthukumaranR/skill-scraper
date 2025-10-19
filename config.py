@@ -27,11 +27,29 @@ class ExtractionConfig:
     skip_existing: bool = True
     """Skip skills that already exist"""
 
+    update_existing: bool = False
+    """Update existing skills instead of skipping them"""
+
     clone_depth: int = 1
     """Git clone depth (1 = shallow clone for speed)"""
 
     temp_dir: str = "/tmp/skill-scraper-clone"
     """Temporary directory for cloning repositories"""
+
+    selection_mode: Literal["auto", "manual"] = "manual"
+    """Post-extraction skill selection mode:
+    - auto: Automatically install all extracted skills
+    - manual: Show review UI and let user select which skills to install
+    """
+
+    install_location: Literal["local", "global"] = "global"
+    """Installation location for skills:
+    - global: ~/.claude/skills (available to all Claude Code instances)
+    - local: ./.claude/skills (project-specific skills)
+    """
+
+    show_skill_review: bool = True
+    """Show post-extraction review UI with skill metadata"""
 
     @classmethod
     def from_interactive(cls) -> "ExtractionConfig":
