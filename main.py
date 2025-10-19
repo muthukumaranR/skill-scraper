@@ -195,7 +195,6 @@ def main():
                     )
 
                     if extraction_result['success']:
-                        successful += extraction_result['extracted_count']
                         total_extracted += extraction_result['extracted_count']
                         logger.info(
                             f"Extracted {extraction_result['extracted_count']} skills "
