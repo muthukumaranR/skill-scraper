@@ -204,7 +204,7 @@ def main():
                         logger.warning(f"Failed to extract skills from {repo_full_name}")
 
                 if config.mode in ["metadata", "both"]:
-                    if skill_gen.generate_skill(repo):
+                    if skill_gen.generate_skill(repo, update=config.update_existing):
                         successful += 1
                     else:
                         failed += 1
