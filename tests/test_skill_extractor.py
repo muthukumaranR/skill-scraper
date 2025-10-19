@@ -155,3 +155,119 @@ class TestSkillExtractor:
         assert isinstance(result["success"], bool)
         assert isinstance(result["extracted_count"], int)
         assert isinstance(result["skills"], list)
+
+    def test_parse_skill_metadata_with_frontmatter(self, tmp_path):
+        """Test parsing skill metadata with frontmatter."""
+        skills_dir = tmp_path / "skills"
+        config = ExtractionConfig.metadata_only()
+        extractor = SkillExtractor(str(skills_dir), config)
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("""---
+name: Test Skill
+description: A test skill for testing
+---
+
+# Test Skill
+
+This is a test skill.""")
+
+        metadata = extractor._parse_skill_metadata(skill_md)
+
+        assert metadata["name"] == "Test Skill"
+        assert metadata["description"] == "A test skill for testing"
+        assert "Test Skill" in metadata["content"]
+
+    def test_parse_skill_metadata_without_frontmatter(self, tmp_path):
+        """Test parsing skill metadata without frontmatter."""
+        skills_dir = tmp_path / "skills"
+        config = ExtractionConfig.metadata_only()
+        extractor = SkillExtractor(str(skills_dir), config)
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("""# My Skill
+This is the description from the content.""")
+
+        metadata = extractor._parse_skill_metadata(skill_md)
+
+        assert "This is the description from the content." in metadata["description"]
+
+    def test_get_staged_skills(self, tmp_path):
+        """Test getting staged skills."""
+        skills_dir = tmp_path / "skills"
+        config = ExtractionConfig.metadata_only()
+        extractor = SkillExtractor(str(skills_dir), config)
+
+        skill1 = extractor.staging_dir / "skill1"
+        skill1.mkdir(parents=True)
+        (skill1 / "SKILL.md").write_text("""---
+name: Skill 1
+description: First skill
+---""")
+
+        skill2 = extractor.staging_dir / "skill2"
+        skill2.mkdir(parents=True)
+        (skill2 / "SKILL.md").write_text("""---
+name: Skill 2
+description: Second skill
+---""")
+
+        staged_skills = extractor.get_staged_skills()
+
+        assert len(staged_skills) == 2
+        assert any(s["name"] == "skill1" for s in staged_skills)
+        assert any(s["name"] == "skill2" for s in staged_skills)
+        assert all("description" in s for s in staged_skills)
+        assert all("staging_path" in s for s in staged_skills)
+        assert all("final_path" in s for s in staged_skills)
+
+    def test_install_skills(self, tmp_path):
+        """Test installing skills from staging."""
+        skills_dir = tmp_path / "skills"
+        config = ExtractionConfig.metadata_only()
+        extractor = SkillExtractor(str(skills_dir), config)
+
+        skill_staging = extractor.staging_dir / "test-skill"
+        skill_staging.mkdir(parents=True)
+        (skill_staging / "SKILL.md").write_text("# Test")
+
+        skills_to_install = [{
+            "name": "test-skill",
+            "staging_path": str(skill_staging),
+            "final_path": str(skills_dir / "test-skill")
+        }]
+
+        result = extractor.install_skills(skills_to_install)
+
+        assert result["success"] == 1
+        assert result["failed"] == 0
+        assert (skills_dir / "test-skill" / "SKILL.md").exists()
+
+    def test_cleanup_staging(self, tmp_path):
+        """Test cleanup of staging directory."""
+        skills_dir = tmp_path / "skills"
+        config = ExtractionConfig.metadata_only()
+        extractor = SkillExtractor(str(skills_dir), config)
+
+        staging_dir = extractor.staging_dir
+        assert staging_dir.exists()
+
+        (staging_dir / "test.txt").write_text("test")
+
+        extractor.cleanup_staging()
+
+        assert not staging_dir.exists()
+
+    def test_local_installation_path(self, tmp_path):
+        """Test local installation path configuration."""
+        config = ExtractionConfig(install_location="local")
+        extractor = SkillExtractor(config=config)
+
+        assert ".claude/skills" in str(extractor.skills_dir)
+
+    def test_global_installation_path(self, tmp_path):
+        """Test global installation path configuration."""
+        config = ExtractionConfig(install_location="global")
+        extractor = SkillExtractor(config=config)
+
+        assert ".claude/skills" in str(extractor.skills_dir)
