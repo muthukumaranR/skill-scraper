@@ -232,13 +232,20 @@ def main():
             if staged_skills:
                 ui.print_status(
                     f"\n✓ Extracted [green]{len(staged_skills)}[/green] skills to staging area\n",
-                    style="bold"
+                    style="bold green"
                 )
+
+                console.print("[bold cyan]" + "=" * 80 + "[/bold cyan]")
+                console.print()
 
                 skills_to_install = []
 
                 if config.selection_mode == "manual":
-                    skills_to_install = ui.review_extracted_skills(staged_skills)
+                    if not ui.confirm_action("Ready to review and select skills for installation?"):
+                        ui.print_status("\n⏭ Skill selection skipped\n", style="yellow")
+                        skills_to_install = []
+                    else:
+                        skills_to_install = ui.review_extracted_skills(staged_skills)
                 else:
                     skills_to_install = staged_skills
                     ui.print_status(
@@ -258,10 +265,17 @@ def main():
                     failed += install_result['failed']
 
                     if install_result['success'] > 0:
-                        install_location = "global (~/.claude/skills)" if config.install_location == "global" else "local (./.claude/skills)"
+                        locations = []
+                        if install_result.get('installed_global', 0) > 0:
+                            locations.append(f"[green]{install_result['installed_global']}[/green] to global (~/.claude/skills)")
+                        if install_result.get('installed_local', 0) > 0:
+                            locations.append(f"[green]{install_result['installed_local']}[/green] to local (./.claude/skills)")
+
+                        location_text = " and ".join(locations) if locations else "skills"
+
                         ui.print_status(
-                            f"✓ Installed [green]{install_result['success']}[/green] skills to {install_location}\n",
-                            style="green bold"
+                            f"✓ Installed {location_text}\n",
+                            style="bold"
                         )
 
                     if install_result['failed'] > 0:

@@ -197,6 +197,37 @@ class RepoSelector:
         logger.info(f"Installation location selected: {location}")
         return location
 
+    def select_installation_location_for_skills(self, skill_count: int) -> str:
+        """
+        Select installation location for selected skills.
+
+        Args:
+            skill_count: Number of skills being installed
+
+        Returns:
+            Installation location ('local' or 'global')
+        """
+        self.console.print()  # Add spacing before prompt
+        location = questionary.select(
+            f"Where should the {skill_count} selected skills be installed?",
+            choices=[
+                Choice(
+                    "🌍 Global (~/.claude/skills) - Available to all Claude Code instances",
+                    value="global"
+                ),
+                Choice(
+                    "📁 Local (./.claude/skills) - Project-specific skills only",
+                    value="local"
+                ),
+            ]
+        ).ask()
+
+        if location is None:
+            location = "global"
+
+        logger.info(f"Installation location selected: {location}")
+        return location
+
     def confirm_repo_merge(self, existing_count: int) -> bool:
         """
         Ask if user wants to merge with existing repos or replace them.
@@ -277,7 +308,7 @@ class RepoSelector:
             staged_skills: List of skill dictionaries from staging
 
         Returns:
-            List of selected skills to install
+            List of selected skills to install with installation location
         """
         if not staged_skills:
             logger.warning("No staged skills to review")
@@ -285,7 +316,30 @@ class RepoSelector:
 
         self._show_staged_skills_summary(staged_skills)
 
-        self.console.print("[dim]Use arrow keys to navigate, space to select/deselect, 'a' to toggle all, enter to confirm[/dim]\n")
+        self.console.print()
+        initial_state = questionary.select(
+            "How would you like to start the selection?",
+            choices=[
+                Choice("🔲 All Off - Start with nothing selected (recommended)", value="none"),
+                Choice("☑️  All On - Start with all skills selected", value="all"),
+            ]
+        ).ask()
+
+        if initial_state is None:
+            logger.info("Skill selection cancelled")
+            return []
+
+        checked_defaults = [skill for skill in staged_skills] if initial_state == "all" else []
+
+        self.console.print()
+        self.console.print("[bold cyan]Skill Selection Interface[/bold cyan]")
+        self.console.print("[dim]Keyboard shortcuts:[/dim]")
+        self.console.print("[dim]  • Arrow keys: Navigate up/down[/dim]")
+        self.console.print("[dim]  • Space: Select/deselect current skill[/dim]")
+        self.console.print("[dim]  • 'a': Toggle all (invert all selections)[/dim]")
+        self.console.print("[dim]  • 'i': Invert selection (swap selected/unselected)[/dim]")
+        self.console.print("[dim]  • Enter: Confirm and continue[/dim]")
+        self.console.print()
 
         choices = []
         for skill in staged_skills:
@@ -294,18 +348,25 @@ class RepoSelector:
                 description = description[:97] + "..."
 
             choice_name = f"{skill['skill_name']}\n   {description}"
-            choices.append(Choice(title=choice_name, value=skill))
+            choices.append(Choice(title=choice_name, value=skill, checked=skill in checked_defaults))
 
         selected = questionary.checkbox(
             f"Select skills to install ({len(staged_skills)} available):",
             choices=choices,
         ).ask()
 
-        if selected is None:
-            logger.info("Skill selection cancelled")
+        if selected is None or len(selected) == 0:
+            logger.info("No skills selected")
             return []
 
-        logger.info(f"Selected {len(selected)} skills for installation")
+        self.console.print(f"\n[green]✓ {len(selected)} skills selected[/green]\n")
+
+        install_location = self.select_installation_location_for_skills(len(selected))
+
+        for skill in selected:
+            skill['install_location'] = install_location
+
+        logger.info(f"Selected {len(selected)} skills for installation to {install_location}")
         return selected
 
     def _show_staged_skills_summary(self, staged_skills: List[Dict[str, str]]):
