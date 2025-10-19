@@ -104,9 +104,16 @@ def main():
 
                 console.print()  # Space after progress bar
 
-            storage.save_repos(repos)
-            ui.print_status("✓ Saved repositories to repos.json\n", style="green")
-            logger.info("Saved repositories to repos.json")
+            merge_repos = False
+            if storage.exists():
+                existing = storage.load_repos()
+                merge_repos = ui.confirm_repo_merge(len(existing))
+
+            storage.save_repos(repos, merge=merge_repos, source=github_url)
+
+            action = "Merged" if merge_repos else "Saved"
+            ui.print_status(f"✓ {action} repositories to repos.json\n", style="green")
+            logger.info(f"{action} repositories to repos.json")
 
         elif action == "load":
             if not storage.exists():
