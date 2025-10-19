@@ -39,7 +39,7 @@ def show_banner():
 |____/|_|\_\_|_|_|  |____/ \___|_|  \__,_| .__/ \___|_|
                                           |_|
 [/bold cyan]
-[dim]Scrape awesome-* lists and install Claude Code skills[/dim]
+[dim]Discover and install Claude Code skills from any GitHub repository[/dim]
 """
     panel = Panel(
         banner,
