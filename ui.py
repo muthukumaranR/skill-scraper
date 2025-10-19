@@ -101,7 +101,7 @@ class RepoSelector:
         action = questionary.select(
             "What would you like to do?",
             choices=[
-                Choice("Scrape new awesome list", value="scrape"),
+                Choice("Scrape new GitHub repository", value="scrape"),
                 Choice("Load from existing repos.json", value="load"),
                 Choice("Exit", value="exit"),
             ]
@@ -118,7 +118,7 @@ class RepoSelector:
         """
         self.console.print()  # Add spacing before prompt
         url = questionary.text(
-            "Enter the GitHub URL of an awesome-* repository:",
+            "Enter the GitHub repository URL (skill repo or list of repos):",
             validate=lambda x: x.startswith("http") or "Please enter a valid URL"
         ).ask()
 
