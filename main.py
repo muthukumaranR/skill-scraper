@@ -30,8 +30,47 @@ def setup_logging():
 
 
 def show_banner():
-    """Display application banner."""
-    banner = r"""[bold cyan]
+    """Display enhanced application banner with ASCII art."""
+    try:
+        import pyfiglet
+        from rich.text import Text
+
+        # Create ASCII art title
+        ascii_art = pyfiglet.figlet_format("Skill Scraper", font="slant")
+
+        # Create gradient effect for the title
+        banner_text = Text()
+        colors = ["cyan", "bright_cyan", "blue", "bright_blue", "cyan"]
+
+        lines = ascii_art.split('\n')
+        for i, line in enumerate(lines):
+            color = colors[i % len(colors)]
+            banner_text.append(line + '\n', style=f"bold {color}")
+
+        banner_text.append("\n")
+        banner_text.append("   🚀 Scrape awesome-* lists and install Claude Code skills 🎯\n", style="dim italic")
+        banner_text.append("   ✨ Enhanced UI with interactive features ✨", style="dim italic")
+
+        panel = Panel(
+            banner_text,
+            box=box.DOUBLE,
+            border_style="cyan",
+            padding=(1, 4)
+        )
+        console.print("\n")
+        console.print(panel)
+
+        # Show version info
+        version_info = Text()
+        version_info.append("   v0.1.0", style="dim")
+        version_info.append(" | ", style="dim")
+        version_info.append("💡 Press Ctrl+C anytime to exit", style="dim yellow")
+        console.print(version_info)
+        console.print()
+
+    except ImportError:
+        # Fallback to simple banner if pyfiglet not available
+        banner = r"""[bold cyan]
  ____  _    _ _ _    ____
 / ___|| | _(_) | |  / ___|  ___ _ __ __ _ _ __   ___ _ __
 \___ \| |/ / | | |  \___ \ / __| '__/ _` | '_ \ / _ \ '__|
@@ -39,19 +78,19 @@ def show_banner():
 |____/|_|\_\_|_|_|  |____/ \___|_|  \__,_| .__/ \___|_|
                                           |_|
 [/bold cyan]
-[dim]Scrape awesome-* lists and install Claude Code skills[/dim]
+[dim]🚀 Scrape awesome-* lists and install Claude Code skills 🎯[/dim]
 """
-    panel = Panel(
-        banner,
-        box=box.DOUBLE,
-        border_style="cyan",
-        padding=(0, 2)
-    )
-    console.print(panel)
+        panel = Panel(
+            banner,
+            box=box.DOUBLE,
+            border_style="cyan",
+            padding=(1, 2)
+        )
+        console.print(panel)
 
 
 def main():
-    """Main workflow for skill scraper."""
+    """Main workflow for skill scraper with enhanced UI."""
     setup_logging()
     show_banner()
     logger.info("Starting skill scraper workflow")
@@ -64,9 +103,13 @@ def main():
     extractor = None
 
     try:
+        # Show helpful tips on first run
+        ui.show_tips()
+
         action = ui.select_action()
 
         if action == "exit":
+            ui.show_success("Thanks for using Skill Scraper! 👋")
             logger.info("Exiting")
             return
 
@@ -76,13 +119,25 @@ def main():
             github_url = ui.get_github_url()
 
             if not github_url:
+                ui.show_error(
+                    "No URL provided",
+                    "Please provide a valid GitHub URL for an awesome-* repository"
+                )
                 logger.error("No URL provided")
                 return
 
             logger.info(f"Scraping {github_url}")
+            ui.print_status(
+                f"\n🔍 Scraping {github_url}...\n",
+                style=f"bold {ui.THEME['info']}"
+            )
             repos = scraper.scrape_awesome_repo(github_url)
 
             if not repos:
+                ui.show_error(
+                    "No repositories found",
+                    "The awesome list might be empty or the URL might be incorrect. Try a different repository."
+                )
                 logger.error("No repositories found")
                 return
 
@@ -117,17 +172,25 @@ def main():
 
         elif action == "load":
             if not storage.exists():
+                ui.show_error(
+                    "No repos.json file found",
+                    "Please scrape an awesome-* repository first to create the storage file"
+                )
                 logger.error("No repos.json file found. Please scrape a repository first.")
                 return
 
             repos = storage.load_repos()
 
             if not repos:
-                ui.print_status("✗ No repositories in storage", style="red bold")
+                ui.show_error(
+                    "No repositories in storage",
+                    "The repos.json file is empty. Try scraping a new awesome list."
+                )
                 logger.error("No repositories in storage")
                 return
 
-            ui.print_status(f"✓ Loaded [green]{len(repos)}[/green] repositories from storage\n", style="bold")
+            ui.show_success(f"Loaded {len(repos)} repositories from storage!")
+            logger.info(f"Loaded {len(repos)} repositories from storage")
 
         config = ui.select_extraction_mode()
 

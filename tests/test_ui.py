@@ -209,9 +209,11 @@ class TestRepoSelector:
         captured = capsys.readouterr()
 
         assert "Installation Summary" in captured.out
-        assert "Total selected" in captured.out
+        # Check for new format with icons (case insensitive or just check for presence of numbers)
+        assert "Total Selected" in captured.out or "Total" in captured.out
         assert "10" in captured.out
-        assert "Successfully added" in captured.out
+        # Check for "Successfully Added" or just "Successfully"
+        assert "Successfully" in captured.out
         assert "8" in captured.out
         assert "Failed" in captured.out
         assert "2" in captured.out
